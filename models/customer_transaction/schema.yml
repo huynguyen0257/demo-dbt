@@ -1,0 +1,27 @@
+
+version: 2
+
+models:
+    - name: load_customer_transaction_snapshot
+      description: "A customer analytic dbt model"
+      columns:
+          - name: customer_id
+            description: "The customer id"
+            tests:
+                - not_null
+          - name: day_time
+            description: "Day view data"
+            tests:
+                - not_null
+          - name: balance
+            description: "current end-of-day balance of each customer"
+            tests:
+                - not_null
+          - name: deposit_amount
+            description: "total amount of money customers have deposited up to the date of data viewing (day_time)"
+            tests:
+                - not_null
+          - name: withdrawal_amount
+            description: "total amount of money customers have withdrawn up to the date of data viewing (day_time)"
+            tests:
+                - not_null
