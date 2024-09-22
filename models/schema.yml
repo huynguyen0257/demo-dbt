@@ -1,8 +1,13 @@
-
 version: 2
 
+sources:
+  - name: my_database
+    schema: public
+    tables:
+      - name: customer_transactions
+
 models:
-    - name: load_customer_transaction_snapshot
+    - name: daily_customer_tracking
       description: "A customer analytic dbt model"
       columns:
           - name: customer_id
