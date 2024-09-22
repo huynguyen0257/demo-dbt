@@ -1,35 +1,50 @@
-{{ config(materialized='table') }}
+{{ config(
+    materialized='incremental',
+    unique_key='customer_id, day_time'
+) }}
 
-WITH date_series AS (
+WITH min_transaction_dates AS (
   SELECT 
-    (getdate()::date - generate_series)::date AS day_time
+    customer_id, 
+    MIN(transaction_date)::date AS min_transaction_date
   FROM 
-    generate_series(1, 365 * 5, 1) -- Generates last 5 years of dates
-), customer_transactions_filtered AS (
-  SELECT
+    {{ ref('customer_transactions') }}
+  GROUP BY 
+    customer_id
+), date_series AS (
+  SELECT 
     customer_id,
-    transaction_date::date as transaction_date,
-    CASE WHEN transaction_type = 'deposit' AND status = 'completed' THEN transaction_amount ELSE 0 END AS deposit_amount,
-    CASE WHEN transaction_type = 'withdrawal' AND status = 'completed' THEN transaction_amount ELSE 0 END AS withdrawal_amount,
-    running_balance as balance
+    generate_series(min_transaction_date, CURRENT_DATE, '1 day')::date AS day_time
   FROM 
-    customer_transactions
-  WHERE
-    status = 'completed'
+    min_transaction_dates
+), customer_transactions_filtered AS (
+  SELECT * FROM {{ ref('customer_transactions_filtered') }}
+), daily_balances AS (
+  SELECT
+    ds.customer_id,
+    ds.day_time,
+    COALESCE(SUM(ctf.balance), LAG(SUM(ctf.balance)) OVER (PARTITION BY ds.customer_id ORDER BY ds.day_time)) AS balance,
+    COALESCE(SUM(ctf.deposit_amount), 0) AS deposit_amount,
+    COALESCE(SUM(ctf.withdrawal_amount), 0) AS withdrawal_amount
+  FROM 
+    date_series ds
+  LEFT JOIN 
+    customer_transactions_filtered ctf 
+  ON 
+    ctf.customer_id = ds.customer_id AND ctf.transaction_date = ds.day_time
+  GROUP BY 
+    ds.customer_id, ds.day_time
 )
 SELECT
-  c.customer_id,
-  d.day_time,
-  COALESCE(SUM(c.balance), LAG(SUM(c.balance)) OVER (PARTITION BY c.customer_id ORDER BY d.day_time)) AS balance,
-  COALESCE(SUM(c.deposit_amount), 0) AS deposit_amount,
-  COALESCE(SUM(c.withdrawal_amount), 0) AS withdrawal_amount
+  customer_id,
+  day_time,
+  balance,
+  deposit_amount,
+  withdrawal_amount
 FROM 
-  date_series d
-LEFT JOIN 
-  customer_transactions_filtered c 
-ON 
-  c.transaction_date = d.day_time
-GROUP BY 
-  c.customer_id, d.day_time
+  daily_balances
+{% if is_incremental() %}
+WHERE day_time >= (SELECT MAX(day_time) FROM {{ this }})
+{% endif %}
 ORDER BY 
-  c.customer_id, d.day_time;
+  customer_id, day_time;
