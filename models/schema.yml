@@ -30,3 +30,7 @@ models:
             description: "total amount of money customers have withdrawn up to the date of data viewing (day_time)"
             tests:
                 - not_null
+          - name: dbt_updated_at
+            description: "tracking incremental change"
+            tests:
+                - not_null
